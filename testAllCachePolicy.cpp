@@ -163,13 +163,13 @@ void testLoopPattern() {
             int key;
             
             // 按照不同模式选择键
-            if (op % 100 < 60) {  // 60%顺序扫描
+            if (op % 100 < 60) {  // 60%顺序扫描（每次 key + 1 % 循环范围）
                 key = current_pos;
                 current_pos = (current_pos + 1) % LOOP_SIZE;
-            } else if (op % 100 < 90) {  // 30%随机跳跃
+            } else if (op % 100 < 90) {  // 30%随机跳跃（循环范围内的随机数）
                 key = gen() % LOOP_SIZE;
-            } else {  // 10%访问范围外数据
-                key = LOOP_SIZE + (gen() % LOOP_SIZE);
+            } else { 
+                key = LOOP_SIZE + (gen() % LOOP_SIZE); // 10% 范围外访问（循环范围外的随机数）
             }
             
             if (isPut) {
