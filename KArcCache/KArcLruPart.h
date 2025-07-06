@@ -11,6 +11,7 @@ template<typename Key, typename Value>
 class ArcLruPart 
 {
 public:
+    // using 也有访问权限
     using NodeType = ArcNode<Key, Value>;
     using NodePtr = std::shared_ptr<NodeType>;
     using NodeMap = std::unordered_map<Key, NodePtr>;
@@ -54,7 +55,7 @@ public:
         auto it = ghostCache_.find(key);
         if (it != ghostCache_.end()) {
             removeFromGhost(it->second);
-            ghostCache_.erase(it);
+            ghostCache_.erase(it); // 相当于一个信号标记，如果被删掉了那么就没必要保留
             return true;
         }
         return false;
@@ -138,8 +139,7 @@ private:
     void evictLeastRecent() 
     {
         NodePtr leastRecent = mainTail_->prev_.lock();
-        if (!leastRecent || leastRecent == mainHead_) 
-            return;
+        if (!leastRecent || leastRecent == mainHead_) return;
 
         // 从主链表中移除
         removeFromMain(leastRecent);
@@ -155,7 +155,7 @@ private:
         mainCache_.erase(leastRecent->getKey());
     }
 
-    void removeFromMain(NodePtr node) 
+    void removeFromMain(NodePtr node) // 和ghost可以融合
     {
         if (!node->prev_.expired() && node->next_) {
             auto prev = node->prev_.lock();
@@ -178,7 +178,7 @@ private:
     void addToGhost(NodePtr node) 
     {
         // 重置节点的访问计数
-        node->accessCount_ = 1;
+        node->accessCount_ = 1; // 仅用于调整lru大小，而不用于恢复旧热数据
         
         // 添加到幽灵缓存的头部
         node->next_ = ghostHead_->next_;
@@ -194,8 +194,7 @@ private:
     {
         // 使用lock()方法，并添加null检查
         NodePtr oldestGhost = ghostTail_->prev_.lock();
-        if (!oldestGhost || oldestGhost == ghostHead_) 
-            return;
+        if (!oldestGhost || oldestGhost == ghostHead_) return;
 
         removeFromGhost(oldestGhost);
         ghostCache_.erase(oldestGhost->getKey());
@@ -209,7 +208,7 @@ private:
     std::mutex mutex_;
 
     NodeMap mainCache_; // key -> ArcNode
-    NodeMap ghostCache_;
+    NodeMap ghostCache_; // 通常只设计为保存key不存value
     
     // 主链表
     NodePtr mainHead_;

@@ -71,8 +71,8 @@ void testHotDataAccess() {
     KamaCache::KLruKCache<int, std::string> lruk(CAPACITY, HOT_KEYS + COLD_KEYS, 2);
     KamaCache::KLfuCache<int, std::string> lfuAging(CAPACITY, 20000);
 
-    std::random_device rd;
-    std::mt19937 gen(rd());
+    std::random_device rd; // 非确定性随机数生成器，通常用来 为伪随机数引擎提供种子值
+    std::mt19937 gen(rd()); // mt19937 是一种高质量的伪随机数引擎，用 rd() 提供的真正随机种子来初始化 gen
     
     // 基类指针指向派生类对象，添加LFU-Aging
     std::array<KamaCache::KICachePolicy<int, std::string>*, 5> caches = {&lru, &lfu, &arc, &lruk, &lfuAging};
@@ -135,7 +135,7 @@ void testLoopPattern() {
     // - 历史记录容量设为总循环大小的两倍，覆盖范围内和范围外的数据
     // - k=2，对于循环访问，这是一个合理的阈值
     KamaCache::KLruKCache<int, std::string> lruk(CAPACITY, LOOP_SIZE * 2, 2);
-    KamaCache::KLfuCache<int, std::string> lfuAging(CAPACITY, 3000);
+    KamaCache::KLfuCache<int, std::string> lfuAging(CAPACITY, 3000); // 带有 老化机制（Aging） 的 LFU
 
     std::array<KamaCache::KICachePolicy<int, std::string>*, 5> caches = {&lru, &lfu, &arc, &lruk, &lfuAging};
     std::vector<int> hits(5, 0);

@@ -65,7 +65,7 @@ private:
         bool inGhost = false;
         if (lruPart_->checkGhost(key)) 
         {
-            if (lfuPart_->decreaseCapacity()) 
+            if (lfuPart_->decreaseCapacity()) // 因缓存分区（LRU / LFU）不能无限缩小，有一个最小容量限制
             {
                 lruPart_->increaseCapacity();
             }
@@ -84,7 +84,7 @@ private:
 
 private:
     size_t capacity_;
-    size_t transformThreshold_;
+    size_t transformThreshold_; // 从lru转移到lfu的访问频率阈值
     std::unique_ptr<ArcLruPart<Key, Value>> lruPart_;
     std::unique_ptr<ArcLfuPart<Key, Value>> lfuPart_;
 };

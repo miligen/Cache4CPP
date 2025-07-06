@@ -22,7 +22,7 @@ private:
     Value value_;
     size_t accessCount_;  // 访问次数
     std::weak_ptr<LruNode<Key, Value>> prev_;  // 改为weak_ptr打破循环引用
-    std::shared_ptr<LruNode<Key, Value>> next_;
+    std::shared_ptr<LruNode<Key, Value>> next_; // LruNode 是模板类，必须带模板参数才能成为完整类型
 
 public:
     LruNode(Key key, Value value)
@@ -46,25 +46,29 @@ template<typename Key, typename Value>
 class KLruCache : public KICachePolicy<Key, Value>
 {
 public:
+    // using生效范围是 整个类 KLruCache<Key, Value> 的内部（包括成员函数）
     using LruNodeType = LruNode<Key, Value>;
     using NodePtr = std::shared_ptr<LruNodeType>;
     using NodeMap = std::unordered_map<Key, NodePtr>;
 
-    KLruCache(int capacity)
-        : capacity_(capacity)
+    KLruCache(int capacity) : capacity_(capacity)
     {
         initializeList();
     }
 
-    ~KLruCache() override = default;
+    ~KLruCache() override = default;// 默认实现：按照定义顺序自动释放所有成员；手动实现场景：用了裸指针（T*），打印日志 / 调试析构顺序，有资源需要释放（文件句柄、Socket、线程等）
+                                    // 1. 调用 dummyTail_ 的析构函数（shared_ptr → 减引用）
+                                    // 2. 调用 dummyHead_ 的析构函数
+                                    // 3. 调用 mutex_ 的析构函数
+                                    // 4. 调用 nodeMap_ 的析构函数（其中所有 shared_ptr 会自动释放指向的对象）
+                                    // 5. 最后销毁 capacity_ （int，不需要特别操作）
 
     // 添加缓存
     void put(Key key, Value value) override
     {
-        if (capacity_ <= 0)
-            return;
+        if (capacity_ <= 0) return;
     
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::lock_guard<std::mutex> lock(mutex_); // lock是变量，构造函数会自动加锁，析构函数会自动解锁；
         auto it = nodeMap_.find(key);
         if (it != nodeMap_.end())
         {
@@ -76,7 +80,7 @@ public:
         addNewNode(key, value);
     }
 
-    bool get(Key key, Value& value) override
+    bool get(Key key, Value& value) override // 被子类（KLruKCache）显式用来判断主缓存是否命中；决定是否从历史访问记录中恢复；
     {
         std::lock_guard<std::mutex> lock(mutex_);
         auto it = nodeMap_.find(key);
@@ -113,7 +117,7 @@ private:
     void initializeList()
     {
         // 创建首尾虚拟节点
-        dummyHead_ = std::make_shared<LruNodeType>(Key(), Value());
+        dummyHead_ = std::make_shared<LruNodeType>(Key(), Value()); // 创建一个 LruNode<Key, Value> 类型的对象（调用默认构造参数），返回一个指向该对象的 shared_ptr
         dummyTail_ = std::make_shared<LruNodeType>(Key(), Value());
         dummyHead_->next_ = dummyTail_;
         dummyTail_->prev_ = dummyHead_;
@@ -144,11 +148,12 @@ private:
         insertNode(node);
     }
 
+    // 从链表上断开节点
     void removeNode(NodePtr node) 
-    {
+    {   // .expired() 表示：这个 weak_ptr 是否已经无效（即指向的对象已经被销毁）；!expired() 表示：前驱节点还活着。
         if(!node->prev_.expired() && node->next_) 
         {
-            auto prev = node->prev_.lock(); // 使用lock()获取shared_ptr
+            auto prev = node->prev_.lock(); // 使用lock()获取shared_ptr， std::weak_ptr 的成员函数：如果 prev_ 仍然指向有效对象，就返回一个指向这个对象的 shared_ptr（引用计数 +1）；
             prev->next_ = node->next_;
             node->next_->prev_ = prev;
             node->next_ = nullptr; // 清空next_指针，彻底断开节点与链表的连接
@@ -160,7 +165,7 @@ private:
     {
         node->next_ = dummyTail_;
         node->prev_ = dummyTail_->prev_;
-        dummyTail_->prev_.lock()->next_ = node; // 使用lock()获取shared_ptr
+        dummyTail_->prev_.lock()->next_ = node; // 使用lock()获取shared_ptr，weak_ptr 不是对象的拥有者，它只是一个弱引用观察者，不能直接解引用、不能用 -> 调用成员；
         dummyTail_->prev_ = node;
     }
 
@@ -173,6 +178,7 @@ private:
     }
 
 private:
+    // 双哨兵节点：使用两个 dummy 节点（头尾）而不是一个 dummy 自指，是为了避免 shared_ptr 的循环引用，确保 dummy 节点可以正确释放
     int           capacity_; // 缓存容量
     NodeMap       nodeMap_; // key -> Node 
     std::mutex    mutex_;
@@ -187,11 +193,11 @@ class KLruKCache : public KLruCache<Key, Value>
 public:
     KLruKCache(int capacity, int historyCapacity, int k)
         : KLruCache<Key, Value>(capacity) // 调用基类构造
-        , historyList_(std::make_unique<KLruCache<Key, size_t>>(historyCapacity))
+        , historyList_(std::make_unique<KLruCache<Key, size_t>>(historyCapacity)) // unique_ptr 唯一拥有，且会在delete默认析构该变量时自动释放对应资源
         , k_(k)
     {}
 
-    Value get(Key key) 
+    Value get(Key key) // TODO：忘记使用override？这里变成了隐藏？
     {
         // 首先尝试从主缓存获取数据
         Value value{};
@@ -278,7 +284,7 @@ class KHashLruCaches
 public:
     KHashLruCaches(size_t capacity, int sliceNum)
         : capacity_(capacity)
-        , sliceNum_(sliceNum > 0 ? sliceNum : std::thread::hardware_concurrency())
+        , sliceNum_(sliceNum > 0 ? sliceNum : std::thread::hardware_concurrency()) // 返回一个 unsigned int，表示：操作系统可用的硬件并发线程数（即 CPU 核心数）
     {
         size_t sliceSize = std::ceil(capacity / static_cast<double>(sliceNum_)); // 获取每个分片的大小
         for (int i = 0; i < sliceNum_; ++i)

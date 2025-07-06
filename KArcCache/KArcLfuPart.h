@@ -28,8 +28,7 @@ public:
 
     bool put(Key key, Value value) 
     {
-        if (capacity_ == 0) 
-            return false;
+        if (capacity_ == 0) return false;
 
         std::lock_guard<std::mutex> lock(mutex_);
         auto it = mainCache_.find(key);
@@ -148,13 +147,11 @@ private:
 
     void evictLeastFrequent() 
     {
-        if (freqMap_.empty()) 
-            return;
+        if (freqMap_.empty()) return;
 
         // 获取最小频率的列表
         auto& minFreqList = freqMap_[minFreq_];
-        if (minFreqList.empty()) 
-            return;
+        if (minFreqList.empty()) return;
 
         // 移除最少使用的节点
         NodePtr leastNode = minFreqList.front();

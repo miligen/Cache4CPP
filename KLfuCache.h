@@ -26,10 +26,8 @@ private:
         std::weak_ptr<Node> pre; // 上一结点改为weak_ptr打破循环引用
         std::shared_ptr<Node> next;
 
-        Node() 
-        : freq(1), next(nullptr) {}
-        Node(Key key, Value value) 
-        : freq(1), key(key), value(value), next(nullptr) {}
+        Node() : freq(1), next(nullptr) {}
+        Node(Key key, Value value) : freq(1), key(key), value(value), next(nullptr) {}
     };
 
     using NodePtr = std::shared_ptr<Node>;
@@ -38,8 +36,7 @@ private:
     NodePtr tail_; // 假尾结点
 
 public:
-    explicit FreqList(int n) 
-     : freq_(n) 
+    explicit FreqList(int n) : freq_(n) 
     {
       head_ = std::make_shared<Node>();
       tail_ = std::make_shared<Node>();
@@ -52,11 +49,10 @@ public:
       return head_->next == tail_;
     }
 
-    // 提那家结点管理方法
+    // 添加节点管理方法
     void addNode(NodePtr node) 
     {
-        if (!node || !head_ || !tail_) 
-            return;
+        if (!node || !head_ || !tail_) return;
 
         node->pre = tail_->pre;
         node->next = tail_;
@@ -66,10 +62,8 @@ public:
 
     void removeNode(NodePtr node)
     {
-        if (!node || !head_ || !tail_)
-            return;
-        if (node->pre.expired() || !node->next) 
-            return;
+        if (!node || !head_ || !tail_) return;
+        if (node->pre.expired() || !node->next) return;
 
         auto pre = node->pre.lock(); // 使用lock()获取shared_ptr
         pre->next = node->next;
@@ -99,8 +93,7 @@ public:
 
     void put(Key key, Value value) override
     {
-        if (capacity_ == 0)
-            return;
+        if (capacity_ == 0) return;
 
         std::lock_guard<std::mutex> lock(mutex_);
         auto it = nodeMap_.find(key);
@@ -181,8 +174,7 @@ void KLfuCache<Key, Value>::getInternal(NodePtr node, Value& value)
     addToFreqList(node);
     // 如果当前node的访问频次如果等于minFreq+1，并且其前驱链表为空，则说明
     // freqToFreqList_[node->freq - 1]链表因node的迁移已经空了，需要更新最小访问频次
-    if (node->freq - 1 == minFreq_ && freqToFreqList_[node->freq - 1]->isEmpty())
-        minFreq_++;
+    if (node->freq - 1 == minFreq_ && freqToFreqList_[node->freq - 1]->isEmpty()) minFreq_++;
 
     // 总访问频次和当前平均访问频次都随之增加
     addFreqNum();
@@ -219,8 +211,7 @@ template<typename Key, typename Value>
 void KLfuCache<Key, Value>::removeFromFreqList(NodePtr node)
 {
     // 检查结点是否为空
-    if (!node) 
-        return;
+    if (!node) return;
     
     auto freq = node->freq;
     freqToFreqList_[freq]->removeNode(node);
@@ -230,8 +221,7 @@ template<typename Key, typename Value>
 void KLfuCache<Key, Value>::addToFreqList(NodePtr node)
 {
     // 检查结点是否为空
-    if (!node) 
-        return;
+    if (!node) return;
 
     // 添加进入相应的频次链表前需要判断该频次链表是否存在
     auto freq = node->freq;
@@ -273,15 +263,13 @@ void KLfuCache<Key, Value>::decreaseFreqNum(int num)
 template<typename Key, typename Value>
 void KLfuCache<Key, Value>::handleOverMaxAverageNum()
 {
-    if (nodeMap_.empty())
-        return;
+    if (nodeMap_.empty()) return;
 
     // 当前平均访问频次已经超过了最大平均访问频次，所有结点的访问频次- (maxAverageNum_ / 2)
     for (auto it = nodeMap_.begin(); it != nodeMap_.end(); ++it)
     {
         // 检查结点是否为空
-        if (!it->second)
-            continue;
+        if (!it->second) continue;
 
         NodePtr node = it->second;
 
@@ -311,8 +299,7 @@ void KLfuCache<Key, Value>::updateMinFreq()
             minFreq_ = std::min(minFreq_, pair.first);
         }
     }
-    if (minFreq_ == INT8_MAX) 
-        minFreq_ = 1;
+    if (minFreq_ == INT8_MAX) minFreq_ = 1; // 如果整个缓存为空（所有频次链表都为空），minFreq_ 就会保持为 INT8_MAX
 }
 
 // 并没有牺牲空间换时间，他是把原有缓存大小进行了分片。

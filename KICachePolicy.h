@@ -9,7 +9,7 @@ class KICachePolicy
 public:
     virtual ~KICachePolicy() {};
 
-    // 添加缓存接口
+    // 添加缓存接口（纯虚函数）
     virtual void put(Key key, Value value) = 0;
 
     // key是传入参数  访问到的值以传出参数的形式返回 | 访问成功返回true
